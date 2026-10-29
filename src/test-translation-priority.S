@@ -223,6 +223,7 @@ _start:
     csrw CSR_PMPADDR0, t0
     li   t0, 0x1f
     csrw CSR_PMPCFG0, t0
+    CLEAR_TRAPS
 
     li   t0, MENVCFG_CRE
     csrs CSR_MENVCFG, t0

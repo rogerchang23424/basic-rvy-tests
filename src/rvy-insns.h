@@ -51,6 +51,11 @@
 #define CSR_MTVAL2  0x34B
 #define CSR_PMPCFG0 0x3A0
 #define CSR_PMPADDR0 0x3B0
+#if __riscv_xlen == 64
+#define PMP_ADDR_MASK ((1 << 54) - 1)
+#else
+#define PMP_ADDR_MASK -1
+#endif
 #define CSR_STVEC   0x105
 #define CSR_SENVCFG 0x10A
 #define CSR_SSCRATCH 0x140

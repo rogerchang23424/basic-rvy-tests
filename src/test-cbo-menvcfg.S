@@ -39,6 +39,7 @@ _start:
     csrw CSR_PMPADDR0, t1
     li   t1, 0x1f
     csrw CSR_PMPCFG0, t1
+    CLEAR_TRAPS
     li   t1, MENVCFG_CRE
     csrs CSR_MENVCFG, t1
     li   t1, MENVCFG_CBO_ALL

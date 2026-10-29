@@ -66,6 +66,7 @@ _start:
     csrw CSR_PMPADDR0, t0
     li   t0, 0x1f
     csrw CSR_PMPCFG0, t0
+    CLEAR_TRAPS
 
     csrr has_h, CSR_MISA
     andi has_h, has_h, (1 << 7)  /* misa.H */

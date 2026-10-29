@@ -91,6 +91,7 @@ _start:
     csrw CSR_PMPADDR0, t0
     li   t0, 0x1f
     csrw CSR_PMPCFG0, t0
+    CLEAR_TRAPS
 
     /* Enable CHERI and U-page access for S-mode. */
     li   t0, MENVCFG_CRE

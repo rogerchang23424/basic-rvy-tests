@@ -13,6 +13,10 @@
  * or emits bounds checks after fetching instruction parcels during
  * translation will probe the target page or upper parcel at translation time
  * and take the page or access fault before the generated PCC check runs.
+ *
+ * The M-mode access-fault cases use a locked non-executable PMP entry (PMP0)
+ * paired with an R|W|X catch-all entry (PMP1) for S-mode, and are skipped
+ * when the hart does not implement at least two PMP entries.
  */
 #define TEST_NAME "ifetch-exception-priority"
 #ifdef CHERI_093
@@ -256,19 +260,6 @@
 _start:
     SETUP_TRAPS
 
-    /*
-     * PMP0: locked R|W (X=0) over noexec_page so M-mode fetch faults with
-     * CAUSE_FETCH_ACCESS_FAULT. PMP1: R|W|X catch-all for S-mode.
-     */
-    lla   t0, noexec_page
-    addi  t0, t0, 2047
-    srli  t0, t0, 2
-    csrw  CSR_PMPADDR0, t0
-    li    t0, -1
-    csrw  CSR_PMPADDR0 + 1, t0
-    li    t0, 0x1f9b
-    csrw  CSR_PMPCFG0, t0
-
     li    t0, MENVCFG_CRE
     csrs  CSR_MENVCFG, t0
 
@@ -332,7 +323,41 @@ _start:
     YMODESWY
     auipc root_cap, 0
 
-    /* M-mode: PCC fault vs PMP fetch access fault (cause 1). */
+    /*
+     * M-mode: PCC fault vs PMP fetch access fault (cause 1).
+     *
+     * Probe PMP0 and PMP1 like OpenSBI's hart_pmp_get_allowed_addr and
+     * __check_csr: clear pmpcfg0, write PMP_ADDR_MASK to pmpaddr0, and read
+     * back the implemented address bits. If pmpcfg0 or pmpaddr0 traps or reads
+     * back zero, PMP is not implemented. If only pmpaddr0 is writable, use it
+     * as the S-mode catch-all; if pmpaddr1 is also writable, lock PMP0 as R|W
+     * (X=0) over noexec_page and set PMP1 as the R|W|X catch-all for S-mode.
+     */
+    SKIPPABLE_BLOCK_BEGIN
+    csrw  CSR_PMPCFG0, x0
+    bnez  trap_count, no_pmp
+    li    t0, PMP_ADDR_MASK
+    csrw  CSR_PMPADDR0, t0
+    bnez  trap_count, no_pmp
+    csrr  t1, CSR_PMPADDR0
+    bnez  trap_count, no_pmp
+    beqz  t1, no_pmp
+    csrw  CSR_PMPADDR0 + 1, t1
+    bnez  trap_count, one_pmp
+    csrr  t2, CSR_PMPADDR0 + 1
+    bnez  trap_count, one_pmp
+    and   t2, t2, t1
+    bne   t2, t1, one_pmp
+
+    lla   t0, noexec_page
+    addi  t0, t0, 2047
+    srli  t0, t0, 2
+    csrw  CSR_PMPADDR0, t0
+    li    t0, -1
+    csrw  CSR_PMPADDR0 + 1, t0
+    li    t0, 0x1f9b
+    csrw  CSR_PMPCFG0, t0
+
     lla   exec_base, exec_page
     CHECK_IFETCH_PRIORITY CAUSE_FETCH_ACCESS_FAULT, "non-executable PMP page"
 
@@ -365,6 +390,16 @@ _start:
     EXPECT_TRAP CAUSE_CHERI_INST
     EXPECT_EPC expected_epc
     EXPECT_EPC_TAG 1
+    j     pmp_done
+one_pmp:
+    li    t0, -1
+    csrw  CSR_PMPADDR0, t0
+    li    t0, 0x1f
+    csrw  CSR_PMPCFG0, t0
+no_pmp:
+    CLEAR_TRAPS
+    SKIPPABLE_BLOCK_SKIPPED "PMP is not implemented"
+pmp_done:
 
     /* S-mode: PCC fault vs fetch page fault (cause 12) for PTE.V=0 and PTE.X=0. */
     YMODESWI
